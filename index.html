@@ -25,7 +25,7 @@
     a{color:var(--link);text-decoration:none}
   </style>
   <!-- Ethers v6 -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers@6.12.0/dist/ethers.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.12.0/dist/ethers.umd.min.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -109,7 +109,8 @@ function parseList(text){
   return text
     .replace(/
 /g,"
-").replace(//g,"
+").replace(/
+/g,"
 ")
     .split("
 ").map(l=>l.trim()).filter(Boolean)
