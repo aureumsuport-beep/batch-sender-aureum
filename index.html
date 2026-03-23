@@ -1,280 +1,172 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
-  <title>AUR Batch – Approve ilimitado + Envio por lista (BSC)</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    :root { --bg:#0b1220; --panel:#0f172a; --mut:#93a4bf; --txt:#e5ecff; --pri:#22c55e; --warn:#ef4444; --link:#60a5fa; --bd:#1e293b; }
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu}
-    .wrap{max-width:980px;margin:0 auto;padding:24px}
-    h1{margin:0 0 16px;font-size:22px}
-    .card{background:var(--panel);border:1px solid var(--bd);border-radius:12px;margin-bottom:16px}
-    .content{padding:16px}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    .btn{appearance:none;border:1px solid var(--bd);border-radius:10px;background:#0b3d28;color:#d1fae5;padding:10px 14px;cursor:pointer}
-    .btn.sec{background:#0b1b3d;color:#c7d2fe}
-    .btn.warn{background:#3d0b0b;color:#fecaca}
-    .btn.gray{background:#111827;color:#e5e7eb}
-    .btn[disabled]{opacity:.6;cursor:not-allowed}
-    .input,.textarea{width:100%;border:1px solid var(--bd);border-radius:10px;padding:10px 12px;background:#0b1020;color:#e5ecff}
-    label{font-size:12px;color:var(--mut)}
-    .grid{display:grid;gap:14px}
-    @media(min-width:900px){.grid.cols-2{grid-template-columns:1fr 1fr}}
-    .log{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:12px;background:#0b1020;border:1px solid var(--bd);border-radius:10px;padding:10px;height:160px;overflow:auto}
-    a{color:var(--link);text-decoration:none}
-  </style>
-  <!-- Ethers v6 – UMD (compatível c/ <script> clássico) -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers@6.12.0/dist/ethers.umd.min.js?v=3"></script>
+<meta charset="utf-8"/>
+<title>AUR Batch PRO (BSC)</title>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.12.0/dist/ethers.umd.min.js"></script>
+
+<style>
+body { background:#0b1220; color:#e5ecff; font-family:system-ui; padding:20px; }
+.card { background:#0f172a; padding:15px; border-radius:10px; margin-bottom:15px; }
+input, textarea { width:100%; padding:10px; margin-top:5px; background:#0b1020; color:white; border:1px solid #1e293b; border-radius:8px; }
+button { margin-top:10px; padding:10px; border:none; border-radius:8px; cursor:pointer; }
+.green { background:#22c55e; }
+.blue { background:#2563eb; }
+.red { background:#ef4444; }
+.log { height:150px; overflow:auto; background:#000; padding:10px; font-size:12px; }
+</style>
 </head>
+
 <body>
-  <div class="wrap">
-    <h1>AUR Batch (BSC) — Approve ilimitado + envio por lista</h1>
 
-    <div class="card"><div class="content grid cols-2">
-      <div>
-        <label>Token AUR (endereço do contrato)</label>
-        <input id="token" class="input"
-               value="0x8FA01B8B65378d086CF0Ba122eC5813a3aDB6Ac1"
-               placeholder="0x... (AUR na BSC)" />
-      </div>
-      <div>
-        <label>Contrato BatchTransfer (endereço do contrato)</label>
-        <input id="batch" class="input"
-               value="0xA83946b6C5Ec22F93B8303CE68E2f84D69b2DEb0"
-               placeholder="0x... (BatchTransfer)" />
-      </div>
-      <div class="row">
-        <button id="btnConnect" class="btn">Conectar MetaMask (BSC)</button>
-        <button id="btnSwitchBSC" class="btn gray">Trocar para BSC</button>
-        <span id="net" style="color:var(--mut)"></span>
-        <span id="acct" style="color:var(--mut)"></span>
-      </div>
-      <div class="row">
-        <button id="btnLoadMeta" class="btn sec">Detectar símbolo/decimais</button>
-        <span id="meta" style="color:var(--mut)"></span>
-      </div>
-      <div class="row">
-        <button id="btnApproveInf" class="btn">Aprovar (ilimitado)</button>
-        <button id="btnRevoke" class="btn warn">Revogar aprovação (zerar)</button>
-      </div>
-    </div></div>
+<h2>AUR Batch Sender PRO (BSC)</h2>
 
-    <div class="card"><div class="content grid cols-2">
-      <div>
-        <label>Lista (um por linha) — formato: <code>0xEndereco, valor</code></label>
-        <textarea id="csv" class="textarea" rows="10" placeholder="0xAbc..., 0.00004&#10;0xDef..., 0.00004"></textarea>
-        <div style="margin-top:8px;color:var(--mut)">Use <strong>ponto</strong> como decimal. Ex.: <code>0.00004</code>.</div>
-      </div>
-      <div>
-        <label>Decimais do AUR</label>
-        <input id="decimals" class="input" placeholder="18" />
-        <div class="row" style="margin-top:10px">
-          <button id="btnSend" class="btn">Enviar lote (batchERC20)</button>
-        </div>
-        <div style="margin-top:10px">
-          <div>Total (decimais humanos): <span id="sumHuman">0</span></div>
-          <div>Total (unidades): <span id="sumUnits">—</span></div>
-        </div>
-      </div>
-    </div></div>
+<div class="card">
+Token: <input id="token" value="0x8FA01B8B65378d086CF0Ba122eC5813a3aDB6Ac1">
+Batch Contract: <input id="batch" value="0xA83946b6C5Ec22F93B8303CE68E2f84D69b2DEb0">
 
-    <div class="card"><div class="content">
-      <div class="row" style="justify-content:space-between">
-        <strong>Logs</strong>
-        <button id="btnClear" class="btn sec">Limpar</button>
-      </div>
-      <div id="log" class="log"></div>
-    </div></div>
-  </div>
+<button class="blue" onclick="connect()">Conectar MetaMask</button>
+<button onclick="switchBSC()">Trocar para BSC</button>
+
+<div id="status"></div>
+</div>
+
+<div class="card">
+<button onclick="loadToken()">Detectar Token</button>
+<div id="tokenInfo"></div>
+
+<button class="green" onclick="approve()">Approve Ilimitado</button>
+<button class="red" onclick="revoke()">Revogar</button>
+</div>
+
+<div class="card">
+<textarea id="list" rows="8" placeholder="0x..., 0.1"></textarea>
+
+<button onclick="preview()">Preview</button>
+<div id="preview"></div>
+
+<button class="green" onclick="send()">ENVIAR LOTE</button>
+</div>
+
+<div class="card log" id="log"></div>
 
 <script>
-const $ = s => document.querySelector(s);
-let provider, signer, account, chainId;
-let tokenAddr, batchAddr, token, decimals = 18, symbol = "";
-
-const ERC20_ABI = [
-  "function symbol() view returns (string)",
-  "function decimals() view returns (uint8)",
-  "function allowance(address owner, address spender) view returns (uint256)",
-  "function approve(address spender, uint256 amount) returns (bool)"
-];
-const BATCH_ABI = [
-  "function batchERC20(address token, address[] recipients, uint256[] amounts) external"
-];
+let provider, signer, account, token, decimals;
 
 function log(msg){
-  const box = $("#log");
-  box.textContent += (box.textContent? "\n":"") + [${new Date().toLocaleTimeString()}] ${msg};
-  box.scrollTop = box.scrollHeight;
+  document.getElementById("log").innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}<br>`;
 }
 
-function banner(msg, type="info") {
-  const line = document.createElement("div");
-  line.style.margin = "8px 0";
-  line.style.padding = "10px 12px";
-  line.style.borderRadius = "8px";
-  line.style.border = "1px solid #1e293b";
-  line.style.background = type === "error" ? "#3d0b0b" : "#0b1b3d";
-  line.style.color = "#c7d2fe";
-  line.textContent = msg;
-  document.querySelector(".wrap").insertBefore(line, document.querySelector(".wrap").firstChild.nextSibling);
-}
-
-function parseList(text){
-  return text
-    .replace(/\r\n/g,"\n")   // Windows → unix
-    .replace(/\r/g,"\n")     // Mac antigo → unix
-    .split("\n")
-    .map(l=>l.trim()).filter(Boolean)
-    .map((line,i)=>{
-      const parts = line.split(/[,\t]/).map(x=>x.trim()).filter(Boolean);
-      if(parts.length < 2) throw new Error(Linha ${i+1}: use "endereco, valor");
-      return { address: parts[0], amountHuman: parts[1] };
-    });
-}
-
-/* Conectar com tratamento (-32002, 4001, MM ausente) */
-async function tryConnect() {
-  if (typeof window.ethereum === "undefined") {
-    banner("MetaMask não detectada. Verifique permissões da extensão, desative outras wallets ou teste janela anônima/Chrome.", "error");
-    log("window.ethereum = undefined");
-    return;
-  }
-  try {
-    const accs = await window.ethereum.request({ method: "eth_requestAccounts" });
-    log("Conectou: " + (accs?.[0] || "sem contas"));
-    await connect();
-  } catch (e) {
-    console.error(e); log("Erro ao conectar: " + (e?.message || e));
-    if (e && (e.code === -32002 || String(e.message||"").includes("pending"))) {
-      banner("Há uma solicitação pendente na MetaMask. Abra a extensão, cancele/confirme e clique Conectar novamente.", "error");
-    } else if (e && e.code === 4001) {
-      banner("Conexão cancelada na MetaMask (4001). Clique Conectar e confirme.", "error");
-    } else {
-      banner("Falha ao conectar. Veja os Logs/Console e me envie a mensagem para ajuste.", "error");
-    }
-  }
-}
-
-/* Trocar para BSC */
-async function switchToBSC() {
-  try {
-    await window.ethereum.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: "0x38" }], // 56
-    });
-    log("Rede trocada para BSC.");
-  } catch (e) {
-    if (e.code === 4902) {
-      await window.ethereum.request({
-        method: "wallet_addEthereumChain",
-        params: [{
-          chainId: "0x38",
-          chainName: "BNB Smart Chain",
-          nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
-          rpcUrls: ["https://bsc-dataseed.binance.org"],
-          blockExplorerUrls: ["https://bscscan.com"],
-        }],
-      });
-      log("BSC adicionada.");
-    } else {
-      log("Erro ao trocar rede: " + (e.message || e));
-      banner("Erro ao trocar rede: " + (e.message || e), "error");
-    }
-  }
-}
-
-/* Conecta e atualiza UI */
 async function connect(){
-  if(!window.ethereum){ alert("MetaMask não detectada."); return; }
-  const accs = await window.ethereum.request({ method:"eth_requestAccounts" });
-  account = ethers.getAddress(accs[0]);
+  await window.ethereum.request({method:"eth_requestAccounts"});
   provider = new ethers.BrowserProvider(window.ethereum);
   signer = await provider.getSigner();
-  const cidHex = await window.ethereum.request({ method:"eth_chainId" });
-  chainId = parseInt(cidHex,16);
-  $("#acct").textContent = Carteira: ${account.slice(0,6)}...${account.slice(-4)};
-  $("#net").textContent = ChainId: ${chainId} (BSC = 56);
-  log(Conectado: ${account} | ChainId ${chainId});
+  account = await signer.getAddress();
+  document.getElementById("status").innerText = "Conectado: " + account;
+  log("Carteira conectada");
 }
 
-async function loadMeta(){
-  tokenAddr = $("#token").value.trim();
-  if(!ethers.isAddress(tokenAddr)){ alert("Token inválido"); return; }
-  const c = new ethers.Contract(tokenAddr, ERC20_ABI, signer || provider || new ethers.BrowserProvider(window.ethereum));
-  symbol = await c.symbol();
-  decimals = Number(await c.decimals());
-  token = c;
-  $("#decimals").value = String(decimals);
-  $("#meta").textContent = Detectado: ${symbol} (decimals ${decimals});
-  log(Token detectado: ${symbol} / decimals ${decimals});
+async function switchBSC(){
+  await window.ethereum.request({
+    method:"wallet_switchEthereumChain",
+    params:[{chainId:"0x38"}]
+  });
 }
 
-async function approveInfinite(){
-  tokenAddr = $("#token").value.trim();
-  batchAddr = $("#batch").value.trim();
-  if(!ethers.isAddress(tokenAddr) || !ethers.isAddress(batchAddr)){ alert("Preencha token e contrato Batch corretamente"); return; }
-  const c = new ethers.Contract(tokenAddr, ERC20_ABI, signer);
-  const MAX = ethers.MaxUint256; // 2^256-1
-  log(Approve ilimitado de ${symbol||"TOKEN"} para ${batchAddr}...);
-  const tx = await c.approve(batchAddr, MAX);
-  log(Approve tx: ${tx.hash});
-  const rc = await tx.wait();
-  log(Approve confirmado. Bloco ${rc.blockNumber});
+async function loadToken(){
+  const addr = token.value;
+  token = new ethers.Contract(addr, [
+    "function decimals() view returns(uint8)",
+    "function symbol() view returns(string)",
+    "function approve(address,uint256)"
+  ], signer);
+
+  decimals = await token.decimals();
+  const sym = await token.symbol();
+
+  document.getElementById("tokenInfo").innerText =
+    `Token: ${sym} | Decimals: ${decimals}`;
+
+  log("Token carregado");
 }
 
-async function revokeApprove(){
-  tokenAddr = $("#token").value.trim();
-  batchAddr = $("#batch").value.trim();
-  if(!ethers.isAddress(tokenAddr) || !ethers.isAddress(batchAddr)){ alert("Preencha token e contrato Batch corretamente"); return; }
-  const c = new ethers.Contract(tokenAddr, ERC20_ABI, signer);
-  log(Revogando approval (zerando allowance) para ${batchAddr}...);
-  const tx = await c.approve(batchAddr, 0n);
-  log(Revoke tx: ${tx.hash});
-  const rc = await tx.wait();
-  log(Revogado. Bloco ${rc.blockNumber});
+async function approve(){
+  const batchAddr = document.getElementById("batch").value;
+  const tx = await token.approve(batchAddr, ethers.MaxUint256);
+  log("Approve enviado: " + tx.hash);
+  await tx.wait();
+  log("Approve confirmado");
 }
 
-function recomputeTotals(rows){
-  const sum = rows.reduce((acc,r)=> acc + (Number(r.amountHuman)||0), 0);
-  $("#sumHuman").textContent = String(sum);
-  $("#sumUnits").textContent = "— (calculado ao enviar)";
+async function revoke(){
+  const batchAddr = document.getElementById("batch").value;
+  const tx = await token.approve(batchAddr, 0);
+  await tx.wait();
+  log("Allowance zerada");
 }
 
-async function sendBatch(){
-  tokenAddr = $("#token").value.trim();
-  batchAddr = $("#batch").value.trim();
-  if(!ethers.isAddress(tokenAddr) || !ethers.isAddress(batchAddr)){ alert("Preencha token e contrato Batch corretamente"); return; }
-  const list = parseList($("#csv").value);
-  const d = Number($("#decimals").value || decimals || 18);
-
-  const recipients = [];
+function parse(){
+  const lines = document.getElementById("list").value.split("\n");
+  const addresses = [];
   const amounts = [];
-  for(const r of list){
-    if(!ethers.isAddress(r.address)) throw new Error(Endereço inválido: ${r.address});
-    const amt = ethers.parseUnits(String(r.amountHuman), d);
-    recipients.push(ethers.getAddress(r.address));
-    amounts.push(amt);
-  }
-  recomputeTotals(list);
 
-  const batch = new ethers.Contract(batchAddr, BATCH_ABI, signer);
-  log(Enviando batch para ${recipients.length} destinatários...);
-  const tx = await batch.batchERC20(tokenAddr, recipients, amounts);
-  log(Tx enviada: ${tx.hash});
-  const rc = await tx.wait();
-  log(Confirmado no bloco ${rc.blockNumber}. Ver: https://bscscan.com/tx/${tx.hash});
+  for(let line of lines){
+    if(!line.trim()) continue;
+    let [addr, val] = line.split(",");
+    addr = addr.trim();
+    val = val.trim();
+
+    if(!ethers.isAddress(addr)) throw "Endereço inválido";
+
+    addresses.push(addr);
+    amounts.push(ethers.parseUnits(val, decimals));
+  }
+
+  return {addresses, amounts};
 }
 
-/* Bindings */
-$("#btnConnect").onclick = tryConnect;
-$("#btnSwitchBSC").onclick = switchToBSC;
-$("#btnLoadMeta").onclick = loadMeta;
-$("#btnApproveInf").onclick = approveInfinite;
-$("#btnRevoke").onclick = revokeApprove;
-$("#btnSend").onclick = async ()=>{ try{ await sendBatch(); }catch(e){ console.error(e); log(Erro: ${e.message||e}); alert(e.message||String(e)); } };
-$("#btnClear").onclick = ()=> $("#log").textContent = "";
+function preview(){
+  try{
+    const {addresses, amounts} = parse();
+    let total = 0;
+
+    amounts.forEach(a => total += Number(ethers.formatUnits(a, decimals)));
+
+    document.getElementById("preview").innerText =
+      `Carteiras: ${addresses.length} | Total: ${total}`;
+
+  }catch(e){
+    alert(e);
+  }
+}
+
+async function send(){
+  try{
+    const {addresses, amounts} = parse();
+    const batch = new ethers.Contract(
+      document.getElementById("batch").value,
+      ["function batchERC20(address,address[],uint256[])"],
+      signer
+    );
+
+    const tx = await batch.batchERC20(
+      document.getElementById("token").value,
+      addresses,
+      amounts,
+      { gasLimit: 3000000 }
+    );
+
+    log("Enviando: " + tx.hash);
+    await tx.wait();
+    log("SUCESSO");
+
+  }catch(e){
+    console.error(e);
+    log("ERRO: " + e);
+  }
+}
 </script>
+
 </body>
 </html>
