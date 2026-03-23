@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -16,6 +15,7 @@
     .btn{appearance:none;border:1px solid var(--bd);border-radius:10px;background:#0b3d28;color:#d1fae5;padding:10px 14px;cursor:pointer}
     .btn.sec{background:#0b1b3d;color:#c7d2fe}
     .btn.warn{background:#3d0b0b;color:#fecaca}
+    .btn.gray{background:#111827;color:#e5e7eb}
     .btn[disabled]{opacity:.6;cursor:not-allowed}
     .input,.textarea{width:100%;border:1px solid var(--bd);border-radius:10px;padding:10px 12px;background:#0b1020;color:#e5ecff}
     label{font-size:12px;color:var(--mut)}
@@ -24,8 +24,8 @@
     .log{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:12px;background:#0b1020;border:1px solid var(--bd);border-radius:10px;padding:10px;height:160px;overflow:auto}
     a{color:var(--link);text-decoration:none}
   </style>
-  <!-- Ethers v6 -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers@6.12.0/dist/ethers.umd.min.js"></script>
+  <!-- Ethers v6 – UMD (compatível c/ <script> clássico) -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.12.0/dist/ethers.umd.min.js?v=3"></script>
 </head>
 <body>
   <div class="wrap">
@@ -46,6 +46,7 @@
       </div>
       <div class="row">
         <button id="btnConnect" class="btn">Conectar MetaMask (BSC)</button>
+        <button id="btnSwitchBSC" class="btn gray">Trocar para BSC</button>
         <span id="net" style="color:var(--mut)"></span>
         <span id="acct" style="color:var(--mut)"></span>
       </div>
@@ -102,25 +103,89 @@ const BATCH_ABI = [
   "function batchERC20(address token, address[] recipients, uint256[] amounts) external"
 ];
 
-function log(msg){ const box = $("#log"); box.textContent += (box.textContent? "
-":"") + `[${new Date().toLocaleTimeString()}] ${msg}`; box.scrollTop = box.scrollHeight; }
+function log(msg){
+  const box = $("#log");
+  box.textContent += (box.textContent? "\n":"") + [${new Date().toLocaleTimeString()}] ${msg};
+  box.scrollTop = box.scrollHeight;
+}
+
+function banner(msg, type="info") {
+  const line = document.createElement("div");
+  line.style.margin = "8px 0";
+  line.style.padding = "10px 12px";
+  line.style.borderRadius = "8px";
+  line.style.border = "1px solid #1e293b";
+  line.style.background = type === "error" ? "#3d0b0b" : "#0b1b3d";
+  line.style.color = "#c7d2fe";
+  line.textContent = msg;
+  document.querySelector(".wrap").insertBefore(line, document.querySelector(".wrap").firstChild.nextSibling);
+}
 
 function parseList(text){
   return text
-    .replace(/
-/g,"
-").replace(/
-/g,"
-")
-    .split("
-").map(l=>l.trim()).filter(Boolean)
+    .replace(/\r\n/g,"\n")   // Windows → unix
+    .replace(/\r/g,"\n")     // Mac antigo → unix
+    .split("\n")
+    .map(l=>l.trim()).filter(Boolean)
     .map((line,i)=>{
-      const parts = line.split(/[\,	]/).map(x=>x.trim()).filter(Boolean);
-      if(parts.length < 2) throw new Error(`Linha ${i+1}: use "endereco, valor"`);
+      const parts = line.split(/[,\t]/).map(x=>x.trim()).filter(Boolean);
+      if(parts.length < 2) throw new Error(Linha ${i+1}: use "endereco, valor");
       return { address: parts[0], amountHuman: parts[1] };
     });
 }
 
+/* Conectar com tratamento (-32002, 4001, MM ausente) */
+async function tryConnect() {
+  if (typeof window.ethereum === "undefined") {
+    banner("MetaMask não detectada. Verifique permissões da extensão, desative outras wallets ou teste janela anônima/Chrome.", "error");
+    log("window.ethereum = undefined");
+    return;
+  }
+  try {
+    const accs = await window.ethereum.request({ method: "eth_requestAccounts" });
+    log("Conectou: " + (accs?.[0] || "sem contas"));
+    await connect();
+  } catch (e) {
+    console.error(e); log("Erro ao conectar: " + (e?.message || e));
+    if (e && (e.code === -32002 || String(e.message||"").includes("pending"))) {
+      banner("Há uma solicitação pendente na MetaMask. Abra a extensão, cancele/confirme e clique Conectar novamente.", "error");
+    } else if (e && e.code === 4001) {
+      banner("Conexão cancelada na MetaMask (4001). Clique Conectar e confirme.", "error");
+    } else {
+      banner("Falha ao conectar. Veja os Logs/Console e me envie a mensagem para ajuste.", "error");
+    }
+  }
+}
+
+/* Trocar para BSC */
+async function switchToBSC() {
+  try {
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: "0x38" }], // 56
+    });
+    log("Rede trocada para BSC.");
+  } catch (e) {
+    if (e.code === 4902) {
+      await window.ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [{
+          chainId: "0x38",
+          chainName: "BNB Smart Chain",
+          nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
+          rpcUrls: ["https://bsc-dataseed.binance.org"],
+          blockExplorerUrls: ["https://bscscan.com"],
+        }],
+      });
+      log("BSC adicionada.");
+    } else {
+      log("Erro ao trocar rede: " + (e.message || e));
+      banner("Erro ao trocar rede: " + (e.message || e), "error");
+    }
+  }
+}
+
+/* Conecta e atualiza UI */
 async function connect(){
   if(!window.ethereum){ alert("MetaMask não detectada."); return; }
   const accs = await window.ethereum.request({ method:"eth_requestAccounts" });
@@ -129,9 +194,9 @@ async function connect(){
   signer = await provider.getSigner();
   const cidHex = await window.ethereum.request({ method:"eth_chainId" });
   chainId = parseInt(cidHex,16);
-  $("#acct").textContent = `Carteira: ${account.slice(0,6)}...${account.slice(-4)}`;
-  $("#net").textContent = `ChainId: ${chainId} (BSC = 56)`;
-  log(`Conectado: ${account} | ChainId ${chainId}`);
+  $("#acct").textContent = Carteira: ${account.slice(0,6)}...${account.slice(-4)};
+  $("#net").textContent = ChainId: ${chainId} (BSC = 56);
+  log(Conectado: ${account} | ChainId ${chainId});
 }
 
 async function loadMeta(){
@@ -142,8 +207,8 @@ async function loadMeta(){
   decimals = Number(await c.decimals());
   token = c;
   $("#decimals").value = String(decimals);
-  $("#meta").textContent = `Detectado: ${symbol} (decimals ${decimals})`;
-  log(`Token detectado: ${symbol} / decimals ${decimals}`);
+  $("#meta").textContent = Detectado: ${symbol} (decimals ${decimals});
+  log(Token detectado: ${symbol} / decimals ${decimals});
 }
 
 async function approveInfinite(){
@@ -152,11 +217,11 @@ async function approveInfinite(){
   if(!ethers.isAddress(tokenAddr) || !ethers.isAddress(batchAddr)){ alert("Preencha token e contrato Batch corretamente"); return; }
   const c = new ethers.Contract(tokenAddr, ERC20_ABI, signer);
   const MAX = ethers.MaxUint256; // 2^256-1
-  log(`Approve ilimitado de ${symbol||"TOKEN"} para ${batchAddr}...`);
+  log(Approve ilimitado de ${symbol||"TOKEN"} para ${batchAddr}...);
   const tx = await c.approve(batchAddr, MAX);
-  log(`Approve tx: ${tx.hash}`);
+  log(Approve tx: ${tx.hash});
   const rc = await tx.wait();
-  log(`Approve confirmado. Bloco ${rc.blockNumber}`);
+  log(Approve confirmado. Bloco ${rc.blockNumber});
 }
 
 async function revokeApprove(){
@@ -164,11 +229,11 @@ async function revokeApprove(){
   batchAddr = $("#batch").value.trim();
   if(!ethers.isAddress(tokenAddr) || !ethers.isAddress(batchAddr)){ alert("Preencha token e contrato Batch corretamente"); return; }
   const c = new ethers.Contract(tokenAddr, ERC20_ABI, signer);
-  log(`Revogando approval (zerando allowance) para ${batchAddr}...`);
+  log(Revogando approval (zerando allowance) para ${batchAddr}...);
   const tx = await c.approve(batchAddr, 0n);
-  log(`Revoke tx: ${tx.hash}`);
+  log(Revoke tx: ${tx.hash});
   const rc = await tx.wait();
-  log(`Revogado. Bloco ${rc.blockNumber}`);
+  log(Revogado. Bloco ${rc.blockNumber});
 }
 
 function recomputeTotals(rows){
@@ -187,7 +252,7 @@ async function sendBatch(){
   const recipients = [];
   const amounts = [];
   for(const r of list){
-    if(!ethers.isAddress(r.address)) throw new Error(`Endereço inválido: ${r.address}`);
+    if(!ethers.isAddress(r.address)) throw new Error(Endereço inválido: ${r.address});
     const amt = ethers.parseUnits(String(r.amountHuman), d);
     recipients.push(ethers.getAddress(r.address));
     amounts.push(amt);
@@ -195,18 +260,20 @@ async function sendBatch(){
   recomputeTotals(list);
 
   const batch = new ethers.Contract(batchAddr, BATCH_ABI, signer);
-  log(`Enviando batch para ${recipients.length} destinatários...`);
+  log(Enviando batch para ${recipients.length} destinatários...);
   const tx = await batch.batchERC20(tokenAddr, recipients, amounts);
-  log(`Tx enviada: ${tx.hash}`);
+  log(Tx enviada: ${tx.hash});
   const rc = await tx.wait();
-  log(`Confirmado no bloco ${rc.blockNumber}. Ver: https://bscscan.com/tx/${tx.hash}`);
+  log(Confirmado no bloco ${rc.blockNumber}. Ver: https://bscscan.com/tx/${tx.hash});
 }
 
-$("#btnConnect").onclick = connect;
+/* Bindings */
+$("#btnConnect").onclick = tryConnect;
+$("#btnSwitchBSC").onclick = switchToBSC;
 $("#btnLoadMeta").onclick = loadMeta;
 $("#btnApproveInf").onclick = approveInfinite;
 $("#btnRevoke").onclick = revokeApprove;
-$("#btnSend").onclick = async ()=>{ try{ await sendBatch(); }catch(e){ console.error(e); log(`Erro: ${e.message||e}`); alert(e.message||String(e)); } };
+$("#btnSend").onclick = async ()=>{ try{ await sendBatch(); }catch(e){ console.error(e); log(Erro: ${e.message||e}); alert(e.message||String(e)); } };
 $("#btnClear").onclick = ()=> $("#log").textContent = "";
 </script>
 </body>
