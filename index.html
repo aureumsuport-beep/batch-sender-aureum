@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <title>AUR Batch PRO (BSC)</title>
 
+<!-- Ethers UMD correto -->
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.12.0/dist/ethers.umd.min.js"></script>
 
 <style>
@@ -14,7 +15,7 @@ button { margin-top:10px; padding:10px; border:none; border-radius:8px; cursor:p
 .green { background:#22c55e; }
 .blue { background:#2563eb; }
 .red { background:#ef4444; }
-.log { height:150px; overflow:auto; background:#000; padding:10px; font-size:12px; }
+.log { height:150px; overflow:auto; background:#000; padding:10px; font-size:12px; white-space:pre-wrap; }
 </style>
 </head>
 
@@ -23,8 +24,10 @@ button { margin-top:10px; padding:10px; border:none; border-radius:8px; cursor:p
 <h2>AUR Batch Sender PRO (BSC)</h2>
 
 <div class="card">
-Token: <input id="token" value="0x8FA01B8B65378d086CF0Ba122eC5813a3aDB6Ac1">
-Batch Contract: <input id="batch" value="0xA83946b6C5Ec22F93B8303CE68E2f84D69b2DEb0">
+Token:
+<input id="token" value="0x8FA01B8B65378d086CF0Ba122eC5813a3aDB6Ac1">
+Batch Contract:
+<input id="batch" value="0xA83946b6C5Ec22F93B8303CE68E2f84D69b2DEb0">
 
 <button class="blue" onclick="connect()">Conectar MetaMask</button>
 <button onclick="switchBSC()">Trocar para BSC</button>
@@ -36,7 +39,7 @@ Batch Contract: <input id="batch" value="0xA83946b6C5Ec22F93B8303CE68E2f84D69b2D
 <button onclick="loadToken()">Detectar Token</button>
 <div id="tokenInfo"></div>
 
-<button class="green" onclick="approve()">Approve Ilimitado</button>
+<button class="green" onclick="approveUnlimited()">Approve Ilimitado</button>
 <button class="red" onclick="revoke()">Revogar</button>
 </div>
 
@@ -52,21 +55,33 @@ Batch Contract: <input id="batch" value="0xA83946b6C5Ec22F93B8303CE68E2f84D69b2D
 <div class="card log" id="log"></div>
 
 <script>
-let provider, signer, account, token, decimals;
+// VARIÁVEIS GLOBAIS REAIS
+let provider, signer, account;
+let tokenContract = null;
+let decimals = 18;
 
 function log(msg){
-  document.getElementById("log").innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}<br>`;
+  document.getElementById("log").innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
 }
 
+// =============================================
+// 1. CONECTAR METAMASK
+// =============================================
 async function connect(){
+  if(!window.ethereum){ alert("MetaMask ausente!"); return; }
+
   await window.ethereum.request({method:"eth_requestAccounts"});
   provider = new ethers.BrowserProvider(window.ethereum);
   signer = await provider.getSigner();
   account = await signer.getAddress();
+
   document.getElementById("status").innerText = "Conectado: " + account;
   log("Carteira conectada");
 }
 
+// =============================================
+// 2. TROCAR PARA BSC
+// =============================================
 async function switchBSC(){
   await window.ethereum.request({
     method:"wallet_switchEthereumChain",
@@ -74,96 +89,142 @@ async function switchBSC(){
   });
 }
 
+// =============================================
+// 3. CARREGAR TOKEN
+// =============================================
 async function loadToken(){
-  const addr = token.value;
-  token = new ethers.Contract(addr, [
-    "function decimals() view returns(uint8)",
-    "function symbol() view returns(string)",
-    "function approve(address,uint256)"
-  ], signer);
+  let addr = document.getElementById("token").value;
 
-  decimals = await token.decimals();
-  const sym = await token.symbol();
+  tokenContract = new ethers.Contract(
+    addr,
+    [
+      "function decimals() view returns(uint8)",
+      "function symbol() view returns(string)",
+      "function approve(address,uint256)"
+    ],
+    signer
+  );
+
+  decimals = await tokenContract.decimals();
+  let sym = await tokenContract.symbol();
 
   document.getElementById("tokenInfo").innerText =
     `Token: ${sym} | Decimals: ${decimals}`;
-
   log("Token carregado");
 }
 
-async function approve(){
-  const batchAddr = document.getElementById("batch").value;
-  const tx = await token.approve(batchAddr, ethers.MaxUint256);
-  log("Approve enviado: " + tx.hash);
-  await tx.wait();
-  log("Approve confirmado");
+// =============================================
+// 4. APPROVE ILIMITADO (CORRIGIDO)
+// =============================================
+async function approveUnlimited(){
+  if(!tokenContract){ alert("Primeiro clique em DETECTAR TOKEN"); return; }
+
+  let batchAddr = document.getElementById("batch").value;
+
+  try{
+    const tx = await tokenContract.approve(batchAddr, ethers.MaxUint256);
+    log("Approve enviado: " + tx.hash);
+    await tx.wait();
+    log("Approve confirmado!");
+    alert("Approve Confirmado!");
+  }catch(e){
+    console.error(e);
+    log("ERRO NO APPROVE: " + e.message);
+    alert("ERRO NO APPROVE: " + e.message);
+  }
 }
 
+// =============================================
+// 5. REVOGAR APPROVE
+// =============================================
 async function revoke(){
-  const batchAddr = document.getElementById("batch").value;
-  const tx = await token.approve(batchAddr, 0);
+  if(!tokenContract){ alert("Clique em DETECTAR TOKEN primeiro"); return; }
+
+  let batchAddr = document.getElementById("batch").value;
+  const tx = await tokenContract.approve(batchAddr, 0);
   await tx.wait();
-  log("Allowance zerada");
+  log("Allowance zerado");
 }
 
-function parse(){
-  const lines = document.getElementById("list").value.split("\n");
-  const addresses = [];
-  const amounts = [];
+// =============================================
+// 6. PARSE DA LISTA (CORRIGIDO)
+// =============================================
+function parseList(){
+  const txt = document.getElementById("list").value;
+  const lines = txt.split("\n");
+
+  let addrs = [];
+  let amts = [];
 
   for(let line of lines){
     if(!line.trim()) continue;
+
     let [addr, val] = line.split(",");
+    if(!addr || !val) throw new Error("Linha inválida: " + line);
+
     addr = addr.trim();
     val = val.trim();
 
-    if(!ethers.isAddress(addr)) throw "Endereço inválido";
+    if(!ethers.isAddress(addr))
+      throw new Error("Endereço inválido: " + addr);
 
-    addresses.push(addr);
-    amounts.push(ethers.parseUnits(val, decimals));
+    let amt = ethers.parseUnits(val, decimals);
+
+    addrs.push(addr);
+    amts.push(amt);
   }
 
-  return {addresses, amounts};
+  return {addrs, amts};
 }
 
+// =============================================
+// 7. PREVIEW
+// =============================================
 function preview(){
   try{
-    const {addresses, amounts} = parse();
+    const {addrs, amts} = parseList();
     let total = 0;
 
-    amounts.forEach(a => total += Number(ethers.formatUnits(a, decimals)));
+    for(let a of amts){
+      total += Number(ethers.formatUnits(a, decimals));
+    }
 
     document.getElementById("preview").innerText =
-      `Carteiras: ${addresses.length} | Total: ${total}`;
+      "Carteiras: " + addrs.length + " | Total: " + total;
 
   }catch(e){
-    alert(e);
+    alert(e.message);
   }
 }
 
+// =============================================
+// 8. ENVIAR LOTE (CORRIGIDO)
+// =============================================
 async function send(){
   try{
-    const {addresses, amounts} = parse();
-    const batch = new ethers.Contract(
+    const {addrs, amts} = parseList();
+
+    let batch = new ethers.Contract(
       document.getElementById("batch").value,
-      ["function batchERC20(address,address[],uint256[])"],
+      ["function batchERC20(address,address[],uint256[]) external"],
       signer
     );
 
     const tx = await batch.batchERC20(
       document.getElementById("token").value,
-      addresses,
-      amounts,
-      { gasLimit: 3000000 }
+      addrs,
+      amts,
+      { gasLimit: 5000000 }
     );
 
-    log("Enviando: " + tx.hash);
+    log("Tx enviada: " + tx.hash);
     await tx.wait();
-    log("SUCESSO");
+    log("SUCESSO!");
 
   }catch(e){
     console.error(e);
-    log("ERRO: " + e);
+    log("ERRO NO ENVIO: " + e.message);
+    alert("ERRO: " + e.message);
   }
 }
 </script>
